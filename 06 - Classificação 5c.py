@@ -13,11 +13,10 @@ os.chdir(workdir_path)
 #pip install gensim
 #%%Parametros de Input
 from gensim.models.doc2vec import Doc2Vec
-model = Doc2Vec.load("Event2Mind_Intentions.model")
+model = Doc2Vec.load("Event2Mind_Events.model")
 import pandas as pd
-input_description = pd.read_csv('embeddingsIntencoes.csv', sep = ',')
-input_description.rename(columns={"Xintent": "Xintent_2"}, inplace = True)
-campo_input = "Xintent_2"
+input_description = pd.read_csv('embeddingsEvents.csv', sep = ';')
+campo_input = "Event"
 #%%Parametros Output
 cluster_output = pd.read_csv('clusterEmotions.csv', sep = ',')
 cluster_output.rename(columns={"Xemotion": "Xemotion_2"}, inplace = True)
@@ -40,8 +39,8 @@ def removeCaracteres(nomeColuna, dataSet):
 '''
 listOutput = cluster_output[campo_output].tolist()
 
-#listPalavras = ['get', 'make', 'help', 'see', 'show', 'know', 'go', 'give', 'take', 'keep', 'fell', 'enjoy', 'work', 'wants', 'find', 'look', 'avoid']
-listPalavras = ['happy', 'glad', 'satisfied', 'excited', 'relieved','proud','great', 'bad' ,'sad', 'better', 'tired']
+listPalavras = ['get', 'make', 'help', 'see', 'show', 'know', 'go', 'give', 'take', 'keep', 'fell', 'enjoy', 'work', 'wants', 'find', 'look', 'avoid']
+#listPalavras = ['happy', 'glad', 'satisfied', 'excited', 'relieved','proud','great', 'bad' ,'sad', 'better', 'tired']
 
 import math
 
@@ -76,8 +75,6 @@ dtPrincipal = dtPrincipal[dtPrincipal[campo_output] != "'none'"]
 dtPrincipal = dtPrincipal[dtPrincipal['Xsent'] > 0]
 
 removeCaracteres(campo_output, dtPrincipal)
-removeCaracteres(campo_input, dtPrincipal)
-#%%Cruzando cluster com todos os eventos
 
 dtPrincipal = dtPrincipal.join(input_description.set_index(campo_input), on = campo_input, how = 'inner')
 dtPrincipal = cluster_output.join(dtPrincipal.set_index(campo_output), on = campo_output, how = 'inner')  
@@ -86,6 +83,8 @@ dtPrincipal = cluster_output.join(dtPrincipal.set_index(campo_output), on = camp
 dtPrincipal['new_index'] = list(range(len(dtPrincipal.index)))
 dtPrincipal['new_index'] = dtPrincipal['new_index'] + 1
 dtPrincipal.set_index(['new_index'], inplace = True)
+
+len(dtPrincipal)
 
 #%%criar um embeddings final que segue a ordem do input no dtPrincipal
 embeddingDupl = []
@@ -118,8 +117,14 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import train_test_split
+#%% Oversampling
+from imblearn.over_sampling import RandomOverSampler
+ros = RandomOverSampler()
+X_ros, Y_ros = ros.fit_sample(X, Y)
+
 #%% Split da base treino e teste
-x_train, x_test, y_train, y_test = train_test_split(X, Y, test_size=0.20, random_state=42)
+x_train, x_test, y_train, y_test = train_test_split(X_ros, Y_ros, random_state=42, stratify=Y_ros, test_size=0.50)
+
 #%% Normalização e Scaler
 '''
 scaler = StandardScaler()
@@ -132,7 +137,6 @@ pcaComp = PCA(n_components = 0.99)
 pcaModel = pcaComp.fit(x_train_scaled)
 x_train_prepared = pcaModel.transform(x_train_scaled)
 x_test_prepared = pcaModel.transform(x_test_scaled)
-
 '''
 
 #testando sem normalização e Scaler
@@ -141,7 +145,7 @@ x_test_prepared = x_test
 #%% Obtendo as dimensões x e y
 dimensao_x = x_train_prepared.shape[1]
 
-camadas_saida  = len(dtPrincipal[target].unique()) + 1
+camadas_saida  = len(dtPrincipal[target].unique()) +  1
 print("dimensao x: %(dx)s e dimensao y: %(dy)s"% {'dx': dimensao_x, 'dy': camadas_saida} )
 #%% nomes e epocas do modelo
 epocas = 500
@@ -318,3 +322,5 @@ acuracias_df = pd.DataFrame(list(zip(descricoes_modelos, acuracias)),
 
 export_path = workdir_path + '/acuracias.csv'
 acuracias_df.to_csv (export_path, index = True, header=True)
+
+

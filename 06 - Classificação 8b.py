@@ -118,8 +118,12 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import train_test_split
+#%% Oversampling
+from imblearn.over_sampling import RandomOverSampler
+ros = RandomOverSampler()
+X_ros, Y_ros = ros.fit_sample(X, Y)
 #%% Split da base treino e teste
-x_train, x_test, y_train, y_test = train_test_split(X, Y, test_size=0.20, random_state=42)
+x_train, x_test, y_train, y_test = train_test_split(X_ros, Y_ros, random_state=42, stratify=Y_ros, test_size=0.50)
 #%% Normalização e Scaler
 '''
 scaler = StandardScaler()

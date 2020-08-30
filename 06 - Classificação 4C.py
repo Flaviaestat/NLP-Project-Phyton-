@@ -13,11 +13,10 @@ os.chdir(workdir_path)
 #pip install gensim
 #%%Parametros de Input
 from gensim.models.doc2vec import Doc2Vec
-model = Doc2Vec.load("Event2Mind_Intentions.model")
+model = Doc2Vec.load("Event2Mind_Events.model")
 import pandas as pd
-input_description = pd.read_csv('embeddingsIntencoes.csv', sep = ',')
-input_description.rename(columns={"Xintent": "Xintent_2"}, inplace = True)
-campo_input = "Xintent_2"
+input_description = pd.read_csv('embeddingsEvents.csv', sep = ';')
+campo_input = "Event"
 #%%Parametros Output
 cluster_output = pd.read_csv('clusterEmotions.csv', sep = ',')
 cluster_output.rename(columns={"Xemotion": "Xemotion_2"}, inplace = True)
@@ -36,10 +35,9 @@ def removeCaracteres(nomeColuna, dataSet):
   dataSet[nomeColuna] = dataSet[nomeColuna].str.replace("&", " ")
   dataSet[nomeColuna] = dataSet[nomeColuna].str.replace(",", " ")
   dataSet[nomeColuna] = dataSet[nomeColuna].str.replace("  ", " ")
-#%% Criando classe
-'''
+#%% transforma em lista
 listOutput = cluster_output[campo_output].tolist()
-
+#%% Criando classe
 #listPalavras = ['get', 'make', 'help', 'see', 'show', 'know', 'go', 'give', 'take', 'keep', 'fell', 'enjoy', 'work', 'wants', 'find', 'look', 'avoid']
 listPalavras = ['happy', 'glad', 'satisfied', 'excited', 'relieved','proud','great', 'bad' ,'sad', 'better', 'tired']
 
@@ -62,22 +60,15 @@ maximo = pd.Series(classes).max()
 classes = [ maximo + 1 if math.isnan(x) else x for x in classes] 
 
 cluster_output = cluster_output.assign(classes=classes)
-'''
-#%% definindo target final (cluster_output, classes, Xsent ou Osent)
-target = "Xsent"
+#%% definindo target final (cluster, classes, Xsent ou Osent)
+target = "classes"
 
 #%%Cruzando cluster com todos os eventos
 #BASE COM TODAS AS INTENÇÕES E EMOÇÕES
 dtPrincipal = pd.read_csv('event2MindClean.csv', sep = ',')
 dtPrincipal = dtPrincipal[dtPrincipal[campo_output] != "none"]
 dtPrincipal = dtPrincipal[dtPrincipal[campo_output] != "'none'"]
- 
-#como o target é Xsent vamos filtrar quem tem a informação
-dtPrincipal = dtPrincipal[dtPrincipal['Xsent'] > 0]
-
 removeCaracteres(campo_output, dtPrincipal)
-removeCaracteres(campo_input, dtPrincipal)
-#%%Cruzando cluster com todos os eventos
 
 dtPrincipal = dtPrincipal.join(input_description.set_index(campo_input), on = campo_input, how = 'inner')
 dtPrincipal = cluster_output.join(dtPrincipal.set_index(campo_output), on = campo_output, how = 'inner')  
@@ -87,6 +78,8 @@ dtPrincipal['new_index'] = list(range(len(dtPrincipal.index)))
 dtPrincipal['new_index'] = dtPrincipal['new_index'] + 1
 dtPrincipal.set_index(['new_index'], inplace = True)
 
+len(dtPrincipal)
+
 #%%criar um embeddings final que segue a ordem do input no dtPrincipal
 embeddingDupl = []
 cluster = []
@@ -95,7 +88,8 @@ for i in range(1, len(dtPrincipal)):
 
   linhaEmbedding = (dtPrincipal['input_index'][i]) - 1
   embeddingDupl.append(embeddings_input[linhaEmbedding])
-  cluster.append(dtPrincipal[target][i]) 
+  cluster.append(dtPrincipal[target][i]) #mudar para classes caso queira usar a classe de palavras
+
 len(embeddingDupl)
 #%% criando numpy arrays para os modelos do sci-kit learn 
 import numpy as np
@@ -103,6 +97,12 @@ import numpy as np
 X = np.array(embeddingDupl)
 Y = np.array(cluster)
 X.shape
+#%% Oversampling
+#pip install imblearn
+from imblearn.over_sampling import RandomOverSampler
+
+ros = RandomOverSampler()
+X_ros, Y_ros = ros.fit_sample(X, Y)
 
 #%%import keras
 from tensorflow.keras.models import Sequential
@@ -119,7 +119,12 @@ from sklearn.decomposition import PCA
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import train_test_split
 #%% Split da base treino e teste
-x_train, x_test, y_train, y_test = train_test_split(X, Y, test_size=0.20, random_state=42)
+x_train, x_test, y_train, y_test = train_test_split(X_ros, Y_ros, random_state=42, stratify=Y_ros, test_size=0.94)
+
+#%% cont_classes
+import collections  
+count_classes = collections.Counter(y_test)
+print(count_classes)
 #%% Normalização e Scaler
 '''
 scaler = StandardScaler()
@@ -128,6 +133,8 @@ scaler_model = scaler.fit(x_train)
 x_train_scaled = scaler_model.transform(x_train)
 x_test_scaled = scaler_model.transform(x_test)
 
+
+
 pcaComp = PCA(n_components = 0.99)
 pcaModel = pcaComp.fit(x_train_scaled)
 x_train_prepared = pcaModel.transform(x_train_scaled)
@@ -135,13 +142,13 @@ x_test_prepared = pcaModel.transform(x_test_scaled)
 
 '''
 
-#testando sem normalização e Scaler
+#testando sem normalização e Scaler - versão b com scaler
 x_train_prepared = x_train
 x_test_prepared = x_test
 #%% Obtendo as dimensões x e y
 dimensao_x = x_train_prepared.shape[1]
 
-camadas_saida  = len(dtPrincipal[target].unique()) + 1
+camadas_saida  = len(dtPrincipal[target].unique())
 print("dimensao x: %(dx)s e dimensao y: %(dy)s"% {'dx': dimensao_x, 'dy': camadas_saida} )
 #%% nomes e epocas do modelo
 epocas = 500
@@ -188,6 +195,13 @@ y_predicted_mlp1 = clf_mlp1.predict(x_test_prepared)
 
 accuracy_modelo1 = metrics.accuracy_score(y_test, y_predicted_mlp1).round(3)
 print(accuracy_modelo1)
+#%%Salvando o modelo
+
+from joblib import dump, load
+#dump(clf_mlp1, 'MLPmodel3.joblib') 
+#clf = load('filename.joblib') 
+
+
 #%% salva resultados
 mlp1_results = pd.DataFrame(list(zip(y_predicted_mlp1, y_test)), columns =['predito', 'real'])
 df_confusion = pd.crosstab(mlp1_results.real, mlp1_results.predito)
@@ -233,7 +247,8 @@ regressor.compile(optimizer = 'adam', loss = 'sparse_categorical_crossentropy', 
 # Visualizar a rede
 regressor.summary()
 #%% Rodando o regressor
-regressor.fit(X_train, y_train, validation_data=(X_test, y_test), epochs = epocas, batch_size = 32)
+#regressor.fit(X_train, y_train, validation_data=(X_test, y_test), epochs = epocas, batch_size = 32)
+regressor.fit(X_train, y_train, epochs = epocas, batch_size = 32)
 acur_test = regressor.evaluate(X_test, y_test, verbose=0)
 accuracy_modelo4 = acur_test[1]
 print(accuracy_modelo4)
@@ -264,7 +279,8 @@ regressor.compile(optimizer = 'adam', loss = 'sparse_categorical_crossentropy', 
 # Visualizar a rede
 regressor.summary()
 #%% Rodando o regressor
-regressor.fit(X_train, y_train, validation_data=(X_test, y_test), epochs = epocas, batch_size = 32 )
+#regressor.fit(X_train, y_train, validation_data=(X_test, y_test), epochs = epocas, batch_size = 32)
+regressor.fit(X_train, y_train, epochs = epocas, batch_size = 32)
 acur_test = regressor.evaluate(X_test, y_test, verbose=0)
 accuracy_modelo5 = acur_test[1]
 print(accuracy_modelo5)
@@ -300,7 +316,8 @@ regressor.compile(optimizer = 'adam', loss = 'sparse_categorical_crossentropy', 
 # Visualizar a rede
 regressor.summary()
 #%% Rodando o regressor
-regressor.fit(X_train, y_train, validation_data=(X_test, y_test), epochs = epocas, batch_size = 32 )
+#regressor.fit(X_train, y_train, validation_data=(X_test, y_test), epochs = epocas, batch_size = 32)
+regressor.fit(X_train, y_train, epochs = epocas, batch_size = 32)
 acur_test = regressor.evaluate(X_test, y_test, verbose=0)
 accuracy_modelo6 = acur_test[1]
 print(accuracy_modelo6)

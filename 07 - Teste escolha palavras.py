@@ -10,58 +10,51 @@ workdir_path = 'C:/Users/Flávia/Google Drive/' + '00 PUC BI MASTER/00 - PROJ (T
 os.chdir(workdir_path)
 #%%Parametros de Input teste
 from gensim.models.doc2vec import Doc2Vec
-doc2vec_model = Doc2Vec.load("Event2Mind_Events.model")
-
-#eventos_exemplos = ['give money poor','asks help', 'drives mom', 'buys big house', 'goes out friends', 'makes food children']
-eventos_exemplos = ['give money poor']
-embeddings_novo = doc2vec_model.infer_vector(eventos_exemplos)
-
-
-#embeddings_novo = []
-
-'''for i in range(0,len(eventos_exemplos)):
-    evento = eventos_exemplos[i]
-    embeddings_calc = doc2vec_model.infer_vector(evento)
-    embeddings_novo.append(embeddings_calc)
-'''    
-#%%Transpor
 import numpy as np
-emb_transposed = embeddings_novo.reshape((1, 400))
-
-
-#%%Parametros de Input teste
-
-from sklearn.preprocessing import StandardScaler
-X = np.array(emb_transposed)
-scaler = StandardScaler()
-#scaler_model = scaler.fit(X)
-scaler_model = load.
-x_scaled = scaler_model.transform(X)
-x_prepared = x_scaled
-X_dev = np.reshape(x_prepared, (x_prepared.shape[0], 1, x_prepared.shape[1]))
-
-#%%import keras
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.layers import LSTM
 from tensorflow.keras.layers import Dropout
+#from sklearn import metrics
+from tensorflow.keras.models import load_model
+#%%Load modelos escolhidos
+#Modelos keras
+clf_lstm_model_intencoes = load_model('modelo3C.h5')
+clf_lstm_model_emocoes = load_model('modelo4C.h5')
+clf_lstm_model_polaridade = load_model('modelo5C.h5')
+doc2vec_model = Doc2Vec.load("Event2Mind_Events.model")
 
-#%% Imports sklearn
-from sklearn import metrics
-from sklearn.neural_network import MLPClassifier
-from sklearn.preprocessing import StandardScaler
+#%% arrays intenções e emoções
+listaIntencoes = ['get', 'make', 'help', 'see', 'show', 'know', 'go', 'give', 'take', 'keep', 'fell', 'enjoy', 'work', 'wants', 'find', 'look', 'avoid', 'others']
+listaEmocoes = ['happy', 'glad', 'satisfied', 'excited', 'relieved','proud','great', 'bad' ,'sad', 'better', 'tired', 'others']
 
-#%%Load modelos escolhido
-from joblib import dump, load
-clf_model_intencoes = load('MLPmodel3.joblib')
-#clf_model_emocoes = load('filename.joblib')
+#%%Parametros de Input teste
+eventos_exemplos = ["asks for help"]
+embeddings_novo = doc2vec_model.infer_vector(eventos_exemplos)
+#%% transposed
+emb_transposed = embeddings_novo.reshape((1, 400))
+#%%normalizando
+minEmb = np.min(emb_transposed)
+maxEmb = np.max(emb_transposed)
+rangeEmb = maxEmb - minEmb
+novoMin = -1
+novoMax = 1
+novoRange = (novoMax - novoMin)
+emb_transposed_norm = (((emb_transposed - minEmb) / rangeEmb) * novoRange) + novoMin
 
-#keras
-#from keras.models import load_model
-#clf_lstm_model_intencoes = load_model('')
-#clf_lstm_model_emocoes = load_model('')
+#%%Parametros de Input teste
+X = np.array(emb_transposed_norm)
+X_dev = np.reshape(X, (X.shape[0], 1, X.shape[1]))
 
+#%% teste predict classes
+y_predicted_intencoes_index_classe = clf_lstm_model_intencoes.predict_classes(X_dev, batch_size=150)
+y_predicted_emocoes_index_classe  = clf_lstm_model_emocoes.predict_classes(X_dev, batch_size=150)
 
-#%%predict
-y_predicted_intencoes = clf_model_intencoes.predict_classes(X_dev)
-y_predicted_emocoes = clf_model_emocoes.predict_classes(X_dev)
+#%%criando array
+y_predicted_intencoes = listaIntencoes[y_predicted_intencoes_index_classe[0]]
+y_predicted_emocoes = listaEmocoes[y_predicted_emocoes_index_classe[0]]
+y_predicted_polaridade = clf_lstm_model_polaridade.predict_classes(X_dev, batch_size=150)[0]
+#%% print
+print(y_predicted_intencoes)
+print(y_predicted_emocoes)
+print(y_predicted_polaridade)
